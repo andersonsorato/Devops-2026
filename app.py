@@ -1,8 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from datetime import datetime
+import logging
+
+import httpx
 
 APP = FastAPI()
 TAREFAS = []
+log = logging.getLogger("uvicorn.error")
 
 # Estrutura da tarefa
 """
@@ -16,13 +20,16 @@ TAREFAS = []
 """
 
 def criar_tarefa(titulo, descricao):
-    return {
+    tarefa = {
         "id": len(TAREFAS),
         "titulo": titulo,
         "descricao": descricao,
         "concluida": False,
         "criada_em": datetime.now()
     }
+    console_log = f"Tarefa criada: {tarefa}"
+    log.info(console_log)
+    return tarefa
 
 @APP.get("/tarefas")
 async def tarefas():
@@ -41,6 +48,29 @@ async def post_tarefa(titulo: str, descricao: str):
     global TAREFAS
 
     tarefa_nova = criar_tarefa(titulo, descricao)
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resposta = await client.post(
+                "http://localhost:8000/notificacoes",
+                json={
+                    "tarefa_id": tarefa_nova["id"],
+                    "titulo": tarefa_nova["titulo"],
+                    "descricao": tarefa_nova["descricao"],
+                },
+            )
+            resposta.raise_for_status()
+        log.info(
+            "Notificação enviada: tarefa %s - %s",
+            tarefa_nova["id"],
+            tarefa_nova["titulo"],
+        )
+    except httpx.HTTPError as exc:
+        log.exception("Falha ao enviar notificação da tarefa")
+        raise HTTPException(
+            status_code=502,
+            detail="Não foi possível enviar a notificação para o serviço na porta 8002",
+        ) from exc
 
     TAREFAS.append(tarefa_nova)
 
