@@ -1,12 +1,14 @@
 from fastapi import FastAPI, HTTPException
 from datetime import datetime
 import logging
+import os
 
 import httpx
 
 APP = FastAPI()
 TAREFAS = []
 log = logging.getLogger("uvicorn.error")
+NOTIFICACAO_URL = os.getenv("NOTIFICACAO_URL", "http://127.0.0.1:8002/notificacoes")
 
 # Estrutura da tarefa
 """
@@ -25,7 +27,7 @@ def criar_tarefa(titulo, descricao):
         "titulo": titulo,
         "descricao": descricao,
         "concluida": False,
-        "criada_em": datetime.now()
+        "criada_em": datetime.now().replace(microsecond=0)
     }
     console_log = f"Tarefa criada: {tarefa}"
     log.info(console_log)
@@ -43,16 +45,16 @@ async def tarefas():
 
     return lista_somente_id_titulo
 
-@APP.post("/tarefas")
+@APP.post("/tarefas", status_code=201)
 async def post_tarefa(titulo: str, descricao: str):
     global TAREFAS
 
     tarefa_nova = criar_tarefa(titulo, descricao)
 
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=2.0) as client:
             resposta = await client.post(
-                "http://localhost:8000/notificacoes",
+                NOTIFICACAO_URL,
                 json={
                     "tarefa_id": tarefa_nova["id"],
                     "titulo": tarefa_nova["titulo"],
@@ -66,11 +68,7 @@ async def post_tarefa(titulo: str, descricao: str):
             tarefa_nova["titulo"],
         )
     except httpx.HTTPError as exc:
-        log.exception("Falha ao enviar notificação da tarefa")
-        raise HTTPException(
-            status_code=502,
-            detail="Não foi possível enviar a notificação para o serviço na porta 8002",
-        ) from exc
+        log.warning("Notificação não enviada para %s: %s", NOTIFICACAO_URL, exc)
 
     TAREFAS.append(tarefa_nova)
 
@@ -89,7 +87,6 @@ async def tarefa_especifica(id: int):
         if id == tarefa["id"]:
             return tarefa
     return {"mensagem": "Tarefa não existe"}
-     
 
 # PUT /tarefas/{id}: Atualiza tarefa específica
 @APP.put("/tarefas/{id}")
@@ -98,13 +95,12 @@ async def concluir_tarefa(id: int):
     # 2. Marcar a tarefa como concluída
     # 3. Você deve armazenar o horário de conclusão da tarefa
     # 4. Caso a tarefa não exista, você tem que mostrar que a tarefa não existe
-    
-     for tarefa in TAREFAS:
+    for tarefa in TAREFAS:
                 if int(tarefa["id"]) == id and tarefa["concluida"] == False:                        
                     tarefa["concluida"] = True
                     tarefa["concluida_em"] = datetime.now()                    
                     return tarefa
-     return {"mensagem": "Tarefa não encontrada"}
+    return {"mensagem": "Tarefa não encontrada"}
 
 # DELETE /tarefas/{id}: Exclui tarefa
 @APP.delete("/tarefas/{id}")
