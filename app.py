@@ -1,54 +1,54 @@
-from fastapi import FastAPI, HTTPException
-from datetime import datetime
+"""API de tarefas para criar, listar, atualizar e remover tarefas."""
+
 import logging
 import os
+from datetime import datetime
 
 import httpx
+from fastapi import FastAPI
 
 APP = FastAPI()
-TAREFAS = []
+TAREFAS: list[dict] = []
 log = logging.getLogger("uvicorn.error")
 NOTIFICACAO_URL = os.getenv("NOTIFICACAO_URL", "http://127.0.0.1:8002/notificacoes")
 
 # Estrutura da tarefa
-"""
-{
-    "id" -> int,
-    "titulo" -> str,
-    "descricao" -> str,
-    "concluida" -> bool,
-    "criada_em" -> datetime
-}
-"""
+# {
+#     "id": int,
+#     "titulo": str,
+#     "descricao": str,
+#     "concluida": bool,
+#     "criada_em": datetime,
+# }
 
-def criar_tarefa(titulo, descricao):
+
+def criar_tarefa(titulo: str, descricao: str):
+    """Cria uma nova tarefa com dados iniciais."""
     tarefa = {
         "id": len(TAREFAS),
         "titulo": titulo,
         "descricao": descricao,
         "concluida": False,
-        "criada_em": datetime.now().replace(microsecond=0)
+        "criada_em": datetime.now().replace(microsecond=0),
     }
-    console_log = f"Tarefa criada: {tarefa}"
-    log.info(console_log)
+    log.info("Tarefa criada: %s", tarefa)
     return tarefa
 
+
 @APP.get("/tarefas")
-async def tarefas():
+async def listar_tarefas():
+    """Lista todas as tarefas com apenas o id e o título."""
     lista_somente_id_titulo = []
 
     for tarefa in TAREFAS:
-        id_tarefa = tarefa['id']
-        titulo_tarefa = tarefa['titulo']
-
-        lista_somente_id_titulo.append({id_tarefa: titulo_tarefa})
+        lista_somente_id_titulo.append({tarefa["id"]: tarefa["titulo"]})
 
     return lista_somente_id_titulo
 
+
 @APP.post("/tarefas", status_code=201)
 async def post_tarefa(titulo: str, descricao: str):
-    global TAREFAS
-
+    """Cria uma nova tarefa e envia notificação externa."""
     tarefa_nova = criar_tarefa(titulo, descricao)
 
     try:
@@ -71,49 +71,40 @@ async def post_tarefa(titulo: str, descricao: str):
         log.warning("Notificação não enviada para %s: %s", NOTIFICACAO_URL, exc)
 
     TAREFAS.append(tarefa_nova)
-
     return {"mensagem": "OK"}
 
-# GET /tarefas: Lista todas as tarefas (somente id e titulo)
-# GET /tarefas/{id}: Visualizar tarefa específica
-# POST /tarefas: Cria tarefa
-# PUT /tarefas/{id}: Atualiza tarefa específica
-# DELETE /tarefas/{id}: Exclui tarefa
 
-@APP.get("/tarefa/{id}")
-
-async def tarefa_especifica(id: int):
+@APP.get("/tarefa/{task_id}")
+async def tarefa_especifica(task_id: int):
+    """Retorna uma tarefa específica pelo identificador."""
     for tarefa in TAREFAS:
-        if id == tarefa["id"]:
+        if task_id == tarefa["id"]:
             return tarefa
     return {"mensagem": "Tarefa não existe"}
 
-# PUT /tarefas/{id}: Atualiza tarefa específica
-@APP.put("/tarefas/{id}")
-async def concluir_tarefa(id: int):
-    # 1. Selecionar a tarefa de ID recebido como parâmetro
-    # 2. Marcar a tarefa como concluída
-    # 3. Você deve armazenar o horário de conclusão da tarefa
-    # 4. Caso a tarefa não exista, você tem que mostrar que a tarefa não existe
+
+@APP.put("/tarefas/{task_id}")
+async def concluir_tarefa(task_id: int):
+    """Marca uma tarefa como concluída e registra o horário de conclusão."""
     for tarefa in TAREFAS:
-                if int(tarefa["id"]) == id and tarefa["concluida"] == False:                        
-                    tarefa["concluida"] = True
-                    tarefa["concluida_em"] = datetime.now()                    
-                    return tarefa
+        if int(tarefa["id"]) == task_id and not tarefa["concluida"]:
+            tarefa["concluida"] = True
+            tarefa["concluida_em"] = datetime.now()
+            return tarefa
     return {"mensagem": "Tarefa não encontrada"}
 
-# DELETE /tarefas/{id}: Exclui tarefa
-@APP.delete("/tarefas/{id}")
-async def apagar_tarefa(id: int):
-    # 1. Selecionar a tarefa de ID recebido como parâmetro
-    # 2. Remover tarefa da lista de tarefas
-    # 3. Caso a tarefa não exista, você tem que mostrar que a tarefa não existe
-    for i, tarefa in enumerate(TAREFAS):
-        if int(tarefa["id"]) == id:
-            del TAREFAS[i]
+
+@APP.delete("/tarefas/{task_id}")
+async def apagar_tarefa(task_id: int):
+    """Remove uma tarefa pelo identificador."""
+    for indice, tarefa in enumerate(TAREFAS):
+        if int(tarefa["id"]) == task_id:
+            del TAREFAS[indice]
             return {"mensagem": "Tarefa excluída com sucesso"}
     return {"mensagem": "Tarefa não encontrada"}
 
+
 @APP.get("/")
 async def index():
+    """Endpoint inicial da API."""
     return {"mensagem": "Olá, mundo!"}
