@@ -101,3 +101,9 @@ def test_post_sem_notificacao(monkeypatch):
     response = client.post("/tarefas?titulo=teste&descricao=teste")
     assert response.status_code == 201
     assert response.json() == {"mensagem": "OK"}
+
+# get autor
+def test_get_autor():    
+    response = client.get("/autor?nome=anderson")
+    assert response.status_code == 200
+    assert response.json() == {"mensagem": "Olá, anderson!"}

@@ -108,3 +108,8 @@ async def apagar_tarefa(task_id: int):
 async def index():
     """Endpoint inicial da API."""
     return {"mensagem": "Olá, mundo!"}
+
+@APP.get("/autor")
+async def retorna_autor(nome: str):
+    """Endpoint para retornar informações sobre um autor."""
+    return {"mensagem": f"Olá, {nome}!"}
