@@ -1,12 +1,14 @@
-FROM python:3.12-slim
+FROM python:3.14-slim
+
+RUN mkdir /app
 
 WORKDIR /app
 
+#    Host  ->  Contêiner
+COPY app/ ./
 COPY requirements.txt ./requirements.txt
-RUN pip install --upgrade pip && pip install -r requirements.txt
 
-COPY app.py ./app.py
+RUN pip install --upgrade pip
+RUN pip install -r requirements.txt
 
-EXPOSE 8000
-
-CMD ["uvicorn", "app:APP", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["fastapi", "run"]
