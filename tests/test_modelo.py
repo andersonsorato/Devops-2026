@@ -1,8 +1,12 @@
+"""Testes para o modelo de tarefas."""
+
 from datetime import datetime
+
 from app.modelo import Tarefa
 
 
 def criar_tarefa_mock():
+    """Cria uma instância de tarefa para os testes."""
     return Tarefa(
         _id=0,
         titulo="Tarefa teste",
@@ -11,22 +15,21 @@ def criar_tarefa_mock():
 
 
 def test_nova_tarefa():
-    t = criar_tarefa_mock()
+    """Verifica que uma nova tarefa é criada corretamente."""
+    tarefa = criar_tarefa_mock()
 
-    assert t.get_id() == 0
-    assert t.titulo == "Tarefa teste"
-    assert t.descricao == None
-    assert t.data_criacao.isoformat() == datetime.now().isoformat(timespec="seconds")
-    assert t.data_conclusao == None
-    assert t.concluida == False
-
-
-# Implementar teste unitário para verificar se a tarefa foi concluida
+    assert tarefa.get_id() == 0
+    assert tarefa.titulo == "Tarefa teste"
+    assert tarefa.descricao is None
+    assert tarefa.data_criacao.isoformat() == datetime.now().isoformat(timespec="seconds")
+    assert tarefa.data_conclusao is None
+    assert not tarefa.concluida
 
 
 def test_tarefa_concluida():
-    t = criar_tarefa_mock()
+    """Verifica que a tarefa é finalizada corretamente."""
+    tarefa = criar_tarefa_mock()
 
-    t.finalizar()
-    assert t.concluida == True
-    assert t.data_conclusao == datetime.now().isoformat(timespec="seconds")
+    tarefa.finalizar()
+    assert tarefa.concluida
+    assert tarefa.data_conclusao == datetime.now().isoformat(timespec="seconds")
