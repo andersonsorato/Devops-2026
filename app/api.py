@@ -1,86 +1,57 @@
-"""Aplicação para o módulo de extensão DevOps."""
+"""Aplicação para o módulo de extensão DevOps"""
 
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, List
 import os
 
-from fastapi import Depends, FastAPI
-from sqlmodel import Session, SQLModel, create_engine, select
+from fastapi import FastAPI, Depends
+from sqlmodel import SQLModel, Session, create_engine, select
+from requests.exceptions import ConnectionError as RequestConnectionError
 
 from .modelo import Tarefa
 
-DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("DATABASE")
-if DATABASE_URL and DATABASE_URL.startswith("sqlite"):
-    ENGINE = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-elif DATABASE_URL:
-    ENGINE = create_engine(DATABASE_URL)
-else:
-    ENGINE = create_engine("sqlite:///./banco.db", connect_args={"check_same_thread": False})
-
-SQLModel.metadata.create_all(ENGINE)
-
-
+DATABASE_USERNAME = os.ENV.get("DATABASE_USERNAME", "root")
+DATABASE_PASSWORD = os.ENV.get("DATABASE_PASSWORD", "root")
+DATABASE_ADDRESS = os.ENV.get("DATABASE_ADDRESS", "localhost")
+DATABASE = os.ENV.get("DATABASE")
+if DATABASE is None:
+    raise RequestConnectionError("Variável de ambiente DATABASE não definida")
+    exit(1)
+    
+ENGINE = create_engine(f"mysql+pymysql://{DATABASE_USERNAME}:{DATABASE_PASSWORD}@{DATABASE_ADDRESS}:3306/{DATABASE}")
 def criar_sessao():
     """Cria uma sessão de conexão com o banco de dados."""
-    session = Session(ENGINE)
-    try:
-        yield session
-    finally:
-        session.close()
-
+    with Session(ENGINE) as s:
+        yield s
 
 SESSAO = Annotated[Session, Depends(criar_sessao)]
 """anotação para injetar a sessão do banco de dados nas rotas do FastAPI"""
-
-
 async def inicializacao(api: FastAPI):
     """Função de inicialização da aplicação."""
     SQLModel.metadata.create_all(ENGINE)
     yield
 
-
 APP = FastAPI(lifespan=inicializacao)
-
-
-def serializar_tarefa(tarefa: Tarefa):
-    """Converte dados de tarefa para o formato esperado pelos testes."""
-    data_criacao = tarefa.data_criacao
-    if isinstance(data_criacao, datetime):
-        data_criacao = data_criacao.astimezone(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
-
-    data_conclusao = tarefa.data_conclusao
-    if isinstance(data_conclusao, datetime):
-        data_conclusao = data_conclusao.astimezone(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
-
-    return {
-        "_id": tarefa.id,
-        "titulo": tarefa.titulo,
-        "descricao": tarefa.descricao,
-        "concluida": tarefa.concluida,
-        "data_criacao": data_criacao,
-        "data_conclusao": data_conclusao,
-    }
+TAREFAS = []
 
 
 # GET /tarefas: Lista todas as tarefas (somente id e titulo)
 @APP.get("/tarefas")
-async def tarefas(sessao: SESSAO):
+async def tarefas(sessao: SESSAO) -> List[Tarefa]:
     """Rota para listar as tarefas."""
-    lista_tarefas = sessao.exec(select(Tarefa)).all()
-    return [tarefa.resumir() for tarefa in lista_tarefas]
 
+    lista_tarefas = sessao.exec(select(Tarefa).offset(0)).all()
+
+    return lista_tarefas
 
 # POST /tarefas: Cria tarefa
 @APP.post("/tarefas", status_code=201)
-async def post_tarefa(sessao: SESSAO, titulo: str, descricao: str | None = None):
+async def post_tarefa(sessao: SESSAO, titulo: str, descricao: str = None):
     """Rota para criar uma tarefa."""
-    proximo_id = sessao.exec(select(Tarefa.id).order_by(Tarefa.id.desc())).first()
-    tarefa_id = 0 if proximo_id is None else int(proximo_id) + 1
     tarefa_nova = Tarefa(
-        id=tarefa_id,
         titulo=titulo,
         descricao=descricao,
-        data_criacao=datetime.now(timezone.utc).replace(microsecond=0),
+        data_criacao=datetime.now().astimezone(timezone.utc),
     )
 
     sessao.add(tarefa_nova)
@@ -92,35 +63,36 @@ async def post_tarefa(sessao: SESSAO, titulo: str, descricao: str | None = None)
 
 # GET /tarefas/{id_tarefa}: Visualizar tarefa específica
 @APP.get("/tarefas/{id_tarefa}")
-async def tarefa_especifica(sessao: SESSAO, id_tarefa: int):
+async def tarefa_especifica(sessao: SESSAO, id_tarefa: int) -> Tarefa:
     """Rota para visualizar uma tarefa específica"""
-    resultado = sessao.exec(select(Tarefa).where(Tarefa.id == id_tarefa)).first()
+    # select * from tarefas where id == id_tarefa
+    regra = select(Tarefa).where(Tarefa.id == id_tarefa)
+    resultado = sessao.exec(regra).all()
 
     if resultado:
-        return serializar_tarefa(resultado)
+        return resultado[0]
 
     return {"mensagem": "Tarefa não existe"}
-
 
 # PUT /tarefas/{id}: Atualiza tarefa específica
 @APP.put("/tarefas/{id_tarefa}")
 async def concluir_tarefa(sessao: SESSAO, id_tarefa: int):
     """Rota para concluir uma tarefa."""
-    resultado = sessao.exec(select(Tarefa).where(Tarefa.id == id_tarefa)).first()
+
+    regra = select(Tarefa).where(Tarefa.id == id_tarefa)
+    resultado = sessao.exec(regra).all()
 
     if not resultado:
         return {"mensagem": "Tarefa não existe"}
 
-    if resultado.concluida is True:
+    if resultado[0].concluida is True:
         return {"mensagem": "Tarefa já finalizada"}
 
-    resultado.finalizar()
-    if isinstance(resultado.data_conclusao, str):
-        resultado.data_conclusao = datetime.fromisoformat(resultado.data_conclusao).replace(tzinfo=timezone.utc)
+    resultado[0].finalizar()
 
-    sessao.add(resultado)
+    sessao.add(resultado[0])
     sessao.commit()
-    sessao.refresh(resultado)
+    sessao.refresh(resultado[0])
 
     return {"mensagem": "Tarefa atualizada"}
 
@@ -128,12 +100,13 @@ async def concluir_tarefa(sessao: SESSAO, id_tarefa: int):
 @APP.delete("/tarefas/{id_tarefa}")
 async def apagar_tarefa(sessao: SESSAO, id_tarefa: int):
     """Remove uma tarefa pela identificação."""
-    resultado = sessao.exec(select(Tarefa).where(Tarefa.id == id_tarefa)).first()
+    selecao = select(Tarefa).where(Tarefa.id == id_tarefa)
+    resultado = sessao.exec(selecao).all()
 
     if not resultado:
         return {"mensagem": "Tarefa não existe"}
 
-    sessao.delete(resultado)
+    sessao.delete(resultado[0])
     sessao.commit()
 
     return {"mensagem": "Tarefa apagada"}
@@ -149,6 +122,3 @@ async def index():
 async def autor():
     """Retorna o autor da aplicação."""
     return {"mensagem": "Anderson Sorato Leme"}
-
-
-app = APP
