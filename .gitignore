@@ -218,3 +218,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+*.db
+*.sqlite3
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-lock
+*.sqlite-journal-lock
+*.sqlite-shm-lock
+*.sqlite-wal-lock

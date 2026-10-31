@@ -3,14 +3,13 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from sqlmodel import SQLModel, Field
 
-
-class Tarefa(BaseModel):
+class Tarefa(SQLModel, table=True):
     """Modelo de tarefa."""
 
-    id: int = Field(alias="_id")
-    titulo: str
+    id: int | None = Field(alias="_id", primary_key=True, unique=True, default=None)
+    titulo: str    
     descricao: Optional[str] = None
     concluida: bool = False
     data_criacao: datetime
