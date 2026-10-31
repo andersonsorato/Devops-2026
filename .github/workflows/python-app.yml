@@ -31,6 +31,10 @@ jobs:
         pylint app
     - name: Test with pytest
       run: |
+        DATABASE_USERNAME=mock 
+        DATABASE_PASSWORD=mock 
+        DATABASE_ADDRESS=mock 
+        DATABASE=mock
         pytest --rootdir app
   entrega:
     needs: build
