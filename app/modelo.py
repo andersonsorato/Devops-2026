@@ -1,65 +1,38 @@
 """Modelos da aplicação de tarefas."""
 
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Optional
+
+from sqlmodel import Field, SQLModel
 
 
-class Tarefa:
-    """Representa uma tarefa da aplicação."""
+class Tarefa(SQLModel, table=True):
+    """Modelo de tarefa."""
 
-    def __init__(
-        self,
-        _id: int | None = None,
-        titulo: str = "",
-        descricao: str | None = None,
-        concluida: bool = False,
-        data_criacao: datetime | str | None = None,
-        data_conclusao: str | None = None,
-    ):
-        self._id = _id
-        self.titulo = titulo
-        self.descricao = descricao
-        self.concluida = concluida
-        if isinstance(data_criacao, str):
-            self.data_criacao = datetime.fromisoformat(data_criacao)
-        else:
-            self.data_criacao = (data_criacao or datetime.now()).replace(microsecond=0)
-        self.data_conclusao = data_conclusao
+    id: int | None = Field(alias="_id", primary_key=True, unique=True, default=None)
+    titulo: str
+    descricao: Optional[str] = None
+    concluida: bool = False
+    data_criacao: datetime
+    data_conclusao: Optional[datetime] = None
 
-    @property
-    def id(self) -> int | None:
-        """Retorna o identificador da tarefa."""
-        return self._id
+    def __init__(self, **data):
+        """Converte string de datas para o tipo datetime."""
+        if "data_criacao" in data and isinstance(data["data_criacao"], str):
+            data["data_criacao"] = datetime.fromisoformat(data["data_criacao"])
+        if "data_conclusao" in data and isinstance(data["data_conclusao"], str):
+            data["data_conclusao"] = datetime.fromisoformat(data["data_conclusao"])
+        super().__init__(**data)
 
-    @id.setter
-    def id(self, value: int | None) -> None:
-        """Define o identificador da tarefa."""
-        self._id = value
-
-    def finalizar(self) -> None:
-        """Finaliza a tarefa atual."""
+    def finalizar(self):
+        """Método para finalizar tarefa."""
         self.concluida = True
-        self.data_conclusao = datetime.now().isoformat(timespec="seconds")
+        self.data_conclusao = datetime.now().replace(tzinfo=None).isoformat(timespec="seconds")
 
-    def resumir(self) -> dict[int | None, str]:
-        """Resume a tarefa em um dicionário com id e título."""
+    def resumir(self):
+        """Resume tarefa em `id: titulo`."""
         return {self.id: self.titulo}
 
-    def to_dict(self) -> dict[str, str | bool | int | None]:
-        """Serializa a tarefa como dicionário compatível com JSON."""
-        data_criacao = (
-            self.data_criacao.isoformat(timespec="seconds")
-            if isinstance(self.data_criacao, datetime)
-            else self.data_criacao
-        )
-        return {
-            "_id": self._id,
-            "titulo": self.titulo,
-            "descricao": self.descricao,
-            "concluida": self.concluida,
-            "data_criacao": data_criacao,
-            "data_conclusao": self.data_conclusao,
-        }
-
-    def get_id(self) -> int | None:
-        """Retorna o id da tarefa."""
-        return self._id
+    def get_id(self):
+        """Retorna ID da tarefa."""
+        return self.id
