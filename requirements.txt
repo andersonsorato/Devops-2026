@@ -1,6 +1,5 @@
 fastapi[standard]
 httpx
-httpx2
 pytest
 pytest-cov
 pylint
