@@ -22,11 +22,19 @@ if DATABASE_URL:
         ENGINE = create_engine(DATABASE_URL, pool_pre_ping=True)
 elif DATABASE_NAME and (DATABASE_USERNAME or DATABASE_PASSWORD or DATABASE_ADDRESS):
     ENGINE = create_engine(
-        f"mysql+pymysql://{DATABASE_USERNAME or 'root'}:{DATABASE_PASSWORD or 'root'}@{DATABASE_ADDRESS or 'localhost'}:3306/{DATABASE_NAME}",
+        f"mysql+pymysql://{
+                            DATABASE_USERNAME or 'root'
+                          }:{
+                              DATABASE_PASSWORD or 'root'
+                            }@{
+                                DATABASE_ADDRESS or 'localhost'
+                                }:3306/{DATABASE_NAME}",
         pool_pre_ping=True,
     )
 else:
-    ENGINE = create_engine("sqlite:///./banco.db", connect_args={"check_same_thread": False})
+    ENGINE = create_engine(
+        "sqlite:///./banco.db", connect_args={"check_same_thread": False}
+    )
 
 SQLModel.metadata.create_all(ENGINE)
 
@@ -44,7 +52,7 @@ SESSAO = Annotated[Session, Depends(criar_sessao)]
 """anotação para injetar a sessão do banco de dados nas rotas do FastAPI"""
 
 
-async def inicializacao(api: FastAPI):
+async def inicializacao(_: FastAPI):
     """Função de inicialização da aplicação."""
     SQLModel.metadata.create_all(ENGINE)
     yield
@@ -64,7 +72,9 @@ def serializar_tarefa(tarefa: Tarefa):
     data_conclusao = tarefa.data_conclusao
     if isinstance(data_conclusao, datetime):
         if data_conclusao.tzinfo is not None:
-            data_conclusao = data_conclusao.astimezone(timezone.utc).replace(tzinfo=None)
+            data_conclusao = data_conclusao.astimezone(timezone.utc).replace(
+                tzinfo=None
+            )
         data_conclusao = data_conclusao.isoformat(timespec="seconds")
 
     return {
@@ -131,7 +141,9 @@ async def concluir_tarefa(sessao: SESSAO, id_tarefa: int):
 
     resultado.finalizar()
     if isinstance(resultado.data_conclusao, str):
-        resultado.data_conclusao = datetime.fromisoformat(resultado.data_conclusao).replace(tzinfo=timezone.utc)
+        resultado.data_conclusao = datetime.fromisoformat(
+            resultado.data_conclusao
+        ).replace(tzinfo=timezone.utc)
 
     sessao.add(resultado)
     sessao.commit()

@@ -21,7 +21,9 @@ def test_nova_tarefa():
     assert tarefa.get_id() == 0
     assert tarefa.titulo == "Tarefa teste"
     assert tarefa.descricao is None
-    assert tarefa.data_criacao.isoformat() == datetime.now().isoformat(timespec="seconds")
+    assert tarefa.data_criacao.isoformat() == datetime.now().isoformat(
+        timespec="seconds"
+    )
     assert tarefa.data_conclusao is None
     assert not tarefa.concluida
 

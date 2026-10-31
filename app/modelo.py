@@ -1,6 +1,6 @@
 """Modelos da aplicação de tarefas."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from sqlmodel import Field, SQLModel
@@ -27,7 +27,9 @@ class Tarefa(SQLModel, table=True):
     def finalizar(self):
         """Método para finalizar tarefa."""
         self.concluida = True
-        self.data_conclusao = datetime.now().replace(tzinfo=None).isoformat(timespec="seconds")
+        self.data_conclusao = (
+            datetime.now().replace(tzinfo=None).isoformat(timespec="seconds")
+        )
 
     def resumir(self):
         """Resume tarefa em `id: titulo`."""
