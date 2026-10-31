@@ -1,6 +1,6 @@
 """Modelos da aplicação de tarefas."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import Field, SQLModel
@@ -16,20 +16,10 @@ class Tarefa(SQLModel, table=True):
     data_criacao: datetime
     data_conclusao: Optional[datetime] = None
 
-    def __init__(self, **data):
-        """Converte string de datas para o tipo datetime."""
-        if "data_criacao" in data and isinstance(data["data_criacao"], str):
-            data["data_criacao"] = datetime.fromisoformat(data["data_criacao"])
-        if "data_conclusao" in data and isinstance(data["data_conclusao"], str):
-            data["data_conclusao"] = datetime.fromisoformat(data["data_conclusao"])
-        super().__init__(**data)
-
     def finalizar(self):
         """Método para finalizar tarefa."""
         self.concluida = True
-        self.data_conclusao = (
-            datetime.now().replace(tzinfo=None).isoformat(timespec="seconds")
-        )
+        self.data_conclusao = datetime.now(timezone.utc).replace(microsecond=0)
 
     def resumir(self):
         """Resume tarefa em `id: titulo`."""

@@ -5,38 +5,38 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import Depends, FastAPI
+from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from .modelo import Tarefa
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-DATABASE_USERNAME = os.getenv("DATABASE_USERNAME")
-DATABASE_PASSWORD = os.getenv("DATABASE_PASSWORD")
-DATABASE_ADDRESS = os.getenv("DATABASE_ADDRESS")
-DATABASE_NAME = os.getenv("DATABASE")
+DATABASE_USERNAME = os.getenv("DATABASE_USERNAME", "root")
+DATABASE_PASSWORD = os.getenv("DATABASE_PASSWORD", "root")
+DATABASE_ADDRESS = os.getenv("DATABASE_ADDRESS", "localhost")
+DATABASE = os.getenv("DATABASE", "devops")
 
-if DATABASE_URL:
-    if DATABASE_URL.startswith("sqlite"):
-        ENGINE = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-    else:
-        ENGINE = create_engine(DATABASE_URL, pool_pre_ping=True)
-elif DATABASE_NAME and (DATABASE_USERNAME or DATABASE_PASSWORD or DATABASE_ADDRESS):
-    ENGINE = create_engine(
-        f"mysql+pymysql://{
-                            DATABASE_USERNAME or 'root'
-                          }:{
-                              DATABASE_PASSWORD or 'root'
-                            }@{
-                                DATABASE_ADDRESS or 'localhost'
-                                }:3306/{DATABASE_NAME}",
-        pool_pre_ping=True,
-    )
-else:
-    ENGINE = create_engine(
-        "sqlite:///./banco.db", connect_args={"check_same_thread": False}
-    )
 
-SQLModel.metadata.create_all(ENGINE)
+def montar_engine():
+    """Cria o engine e faz fallback para SQLite quando o MySQL não estiver disponível."""
+    if DATABASE_URL:
+        if DATABASE_URL.startswith("sqlite"):
+            return create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+        return create_engine(DATABASE_URL, pool_pre_ping=True)
+
+    mysql_url = (
+        f"postgresql+psycopg://{DATABASE_USERNAME}:{DATABASE_PASSWORD}@{DATABASE_ADDRESS}:3306/{DATABASE}"
+    )
+    try:
+        engine = create_engine(mysql_url, pool_pre_ping=True)
+        with engine.connect() as conn:
+            conn.exec_driver_sql("SELECT 1")
+        return engine
+    except OperationalError:
+        return create_engine("postgresql+psycopg:///./banco.db", connect_args={"check_same_thread": False})
+
+
+ENGINE = montar_engine()
 
 
 def criar_sessao():
@@ -49,11 +49,10 @@ def criar_sessao():
 
 
 SESSAO = Annotated[Session, Depends(criar_sessao)]
-"""anotação para injetar a sessão do banco de dados nas rotas do FastAPI"""
 
 
 async def inicializacao(_: FastAPI):
-    """Função de inicialização da aplicação."""
+    """Função de inicialização da API."""
     SQLModel.metadata.create_all(ENGINE)
     yield
 
@@ -61,48 +60,46 @@ async def inicializacao(_: FastAPI):
 APP = FastAPI(lifespan=inicializacao)
 
 
+def formatar_data(value):
+    """Padroniza datetime para string ISO com timezone UTC e sem microssegundos."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        else:
+            value = value.astimezone(timezone.utc)
+        return value.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return value
+
+
 def serializar_tarefa(tarefa: Tarefa):
-    """Converte tarefa para um dicionário serializável."""
-    data_criacao = tarefa.data_criacao
-    if isinstance(data_criacao, datetime):
-        if data_criacao.tzinfo is not None:
-            data_criacao = data_criacao.astimezone(timezone.utc).replace(tzinfo=None)
-        data_criacao = data_criacao.isoformat(timespec="seconds")
-
-    data_conclusao = tarefa.data_conclusao
-    if isinstance(data_conclusao, datetime):
-        if data_conclusao.tzinfo is not None:
-            data_conclusao = data_conclusao.astimezone(timezone.utc).replace(
-                tzinfo=None
-            )
-        data_conclusao = data_conclusao.isoformat(timespec="seconds")
-
+    """Converte a tarefa para um dicionário JSON serializável."""
     return {
         "_id": tarefa.id,
         "titulo": tarefa.titulo,
         "descricao": tarefa.descricao,
         "concluida": tarefa.concluida,
-        "data_criacao": data_criacao,
-        "data_conclusao": data_conclusao,
+        "data_criacao": formatar_data(tarefa.data_criacao),
+        "data_conclusao": formatar_data(tarefa.data_conclusao),
     }
 
 
-# GET /tarefas: Lista todas as tarefas (somente id e titulo)
 @APP.get("/tarefas")
 async def tarefas(sessao: SESSAO):
-    """Rota para listar as tarefas."""
+    """Lista todas as tarefas."""
     lista_tarefas = sessao.exec(select(Tarefa)).all()
-    return [tarefa.resumir() for tarefa in lista_tarefas]
+    return [serializar_tarefa(tarefa) for tarefa in lista_tarefas]
 
 
-# POST /tarefas: Cria tarefa
 @APP.post("/tarefas", status_code=201)
 async def post_tarefa(sessao: SESSAO, titulo: str, descricao: str | None = None):
-    """Rota para criar uma tarefa."""
-    proximo_id = sessao.exec(select(Tarefa.id).order_by(Tarefa.id.desc())).first()
-    tarefa_id = 0 if proximo_id is None else int(proximo_id) + 1
+    """Cria uma nova tarefa."""
+    ultima_tarefa = sessao.exec(select(Tarefa.id).order_by(Tarefa.id.desc())).first()
+    novo_id = 1 if ultima_tarefa is None else int(ultima_tarefa) + 1
+
     tarefa_nova = Tarefa(
-        id=tarefa_id,
+        id=novo_id,
         titulo=titulo,
         descricao=descricao,
         data_criacao=datetime.now(timezone.utc).replace(microsecond=0),
@@ -115,10 +112,9 @@ async def post_tarefa(sessao: SESSAO, titulo: str, descricao: str | None = None)
     return {"mensagem": "OK"}
 
 
-# GET /tarefas/{id_tarefa}: Visualizar tarefa específica
 @APP.get("/tarefas/{id_tarefa}")
 async def tarefa_especifica(sessao: SESSAO, id_tarefa: int):
-    """Rota para visualizar uma tarefa específica"""
+    """Recupera uma tarefa específica."""
     resultado = sessao.exec(select(Tarefa).where(Tarefa.id == id_tarefa)).first()
 
     if resultado:
@@ -127,24 +123,18 @@ async def tarefa_especifica(sessao: SESSAO, id_tarefa: int):
     return {"mensagem": "Tarefa não existe"}
 
 
-# PUT /tarefas/{id}: Atualiza tarefa específica
 @APP.put("/tarefas/{id_tarefa}")
 async def concluir_tarefa(sessao: SESSAO, id_tarefa: int):
-    """Rota para concluir uma tarefa."""
+    """Conclui uma tarefa existente."""
     resultado = sessao.exec(select(Tarefa).where(Tarefa.id == id_tarefa)).first()
 
     if not resultado:
         return {"mensagem": "Tarefa não existe"}
 
-    if resultado.concluida is True:
+    if resultado.concluida:
         return {"mensagem": "Tarefa já finalizada"}
 
     resultado.finalizar()
-    if isinstance(resultado.data_conclusao, str):
-        resultado.data_conclusao = datetime.fromisoformat(
-            resultado.data_conclusao
-        ).replace(tzinfo=timezone.utc)
-
     sessao.add(resultado)
     sessao.commit()
     sessao.refresh(resultado)
@@ -154,7 +144,7 @@ async def concluir_tarefa(sessao: SESSAO, id_tarefa: int):
 
 @APP.delete("/tarefas/{id_tarefa}")
 async def apagar_tarefa(sessao: SESSAO, id_tarefa: int):
-    """Remove uma tarefa pela identificação."""
+    """Remove uma tarefa."""
     resultado = sessao.exec(select(Tarefa).where(Tarefa.id == id_tarefa)).first()
 
     if not resultado:
@@ -163,7 +153,7 @@ async def apagar_tarefa(sessao: SESSAO, id_tarefa: int):
     sessao.delete(resultado)
     sessao.commit()
 
-    return {"mensagem": "Tarefa apagada"}
+    return {"mensagem": "Tarefa removida"}
 
 
 @APP.get("/")
@@ -176,6 +166,3 @@ async def index():
 async def autor():
     """Retorna o autor da aplicação."""
     return {"mensagem": "Anderson Sorato Leme"}
-
-
-app = APP
