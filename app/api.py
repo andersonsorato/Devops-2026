@@ -1,4 +1,4 @@
-"""Aplicação para o módulo de extensão DevOps."""
+"""Aplicação para o módulo de extensão DevOps. ASL"""
 
 import os
 from datetime import datetime, timezone
