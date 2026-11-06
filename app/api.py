@@ -15,14 +15,18 @@ DATABASE_USERNAME = os.getenv("DATABASE_USERNAME", "root")
 DATABASE_PASSWORD = os.getenv("DATABASE_PASSWORD", "root")
 DATABASE_ADDRESS = os.getenv("DATABASE_ADDRESS", "localhost")
 DATABASE = os.getenv("DATABASE", "devops")
+FALLBACK_DATABASE_URL = "sqlite:///banco.db"
 
 
 def montar_engine():
-    """Cria o engine e faz fallback para SQLite quando o MySQL não estiver disponível."""
+    """Cria o engine e faz fallback para SQLite quando o banco principal não estiver disponível."""
     if DATABASE_URL:
         if DATABASE_URL.startswith("sqlite"):
             return create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-        return create_engine(DATABASE_URL, pool_pre_ping=True)
+        try:
+            return create_engine(DATABASE_URL, pool_pre_ping=True)
+        except (ModuleNotFoundError, ImportError, OperationalError):
+            return create_engine(FALLBACK_DATABASE_URL, connect_args={"check_same_thread": False})
 
     mysql_url = (
         f"postgresql+psycopg://{DATABASE_USERNAME}:{DATABASE_PASSWORD}@{DATABASE_ADDRESS}:3306/{DATABASE}"
@@ -32,8 +36,8 @@ def montar_engine():
         with engine.connect() as conn:
             conn.exec_driver_sql("SELECT 1")
         return engine
-    except OperationalError:
-        return create_engine("postgresql+psycopg:///./banco.db", connect_args={"check_same_thread": False})
+    except (ModuleNotFoundError, ImportError, OperationalError):
+        return create_engine(FALLBACK_DATABASE_URL, connect_args={"check_same_thread": False})
 
 
 ENGINE = montar_engine()
