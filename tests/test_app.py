@@ -1,25 +1,31 @@
-import pytest
+"""Testes da API de tarefas."""
 
-from fastapi.testclient import TestClient
-from app.api import APP, criar_sessao
 from datetime import datetime
+
+import pytest
+from fastapi.testclient import TestClient
 from sqlmodel import SQLModel, Session, create_engine
 
-DATA = None
-DATA_CONCLUSAO = None
+from app.api import APP, criar_sessao
+
 BANCO = create_engine("sqlite:///banco.db", connect_args={"check_same_thread": False})
+
 
 @pytest.fixture(name="sessao")
 def fixture_sessao():
+    """Cria uma sessão isolada para cada teste."""
     SQLModel.metadata.create_all(BANCO)
 
-    with Session(BANCO) as s:
-        yield s
+    with Session(BANCO) as session:
+        yield session
 
     SQLModel.metadata.drop_all(BANCO)
 
-@pytest.fixture(name='cliente')
+
+@pytest.fixture(name="cliente")
 def fixture_cliente(sessao: Session):
+    """Cria um cliente de teste com a sessão injetada."""
+
     def get_sessao():
         return sessao
 
@@ -30,26 +36,26 @@ def fixture_cliente(sessao: Session):
 
     APP.dependency_overrides.clear()
 
+
 def test_index(cliente: TestClient):
+    """Verifica a rota raiz."""
     resposta = cliente.get("/")
     assert resposta.status_code == 200
     assert resposta.json() == {"mensagem": "Olá, mundo!"}
 
 
-# 1. Implementar um teste unitário para a rota /tarefas (GET)
 def test_tarefas_get(cliente: TestClient):
+    """Verifica que a rota de listagem retorna uma lista vazia."""
     resposta = cliente.get("/tarefas")
     assert resposta.status_code == 200
-
-    # Testando se a rota retorna uma lista vazia
     assert resposta.json() == []
 
 
-# 2. Implementar um teste unitário para a rota /tarefas (POST)
 def test_tarefas_post(cliente: TestClient):
-    global DATA
+    """Verifica a criação de uma tarefa."""
+    data_esperada = datetime.now().replace(microsecond=0).isoformat() + "Z"
+
     resposta = cliente.post("/tarefas?titulo=teste&descricao=teste")
-    DATA = datetime.now().replace(microsecond=0).isoformat() + "Z"
 
     assert resposta.status_code == 201
     assert resposta.json() == {"mensagem": "OK"}
@@ -59,21 +65,22 @@ def test_tarefas_post(cliente: TestClient):
         {
             "_id": 1,
             "descricao": "teste",
-            "data_criacao": DATA,
+            "data_criacao": data_esperada,
             "concluida": False,
             "titulo": "teste",
-            "data_conclusao": None
+            "data_conclusao": None,
         }
     ]
 
-# 3. Implementar um teste unitário para a rota /tarefas/{id} (PUT)
-def test_tarefas_put(cliente: TestClient):
-    # Crio a tarefa
-    resposta = cliente.post("/tarefas?titulo=teste&descricao=teste")
 
-    # Finalizo a tarefa
+def test_tarefas_put(cliente: TestClient):
+    """Verifica a conclusão e o retorno de uma tarefa."""
+    data_esperada = datetime.now().replace(microsecond=0).isoformat() + "Z"
+
+    cliente.post("/tarefas?titulo=teste&descricao=teste")
+
     resposta = cliente.put("/tarefas/1")
-    DATA_CONCLUSAO = datetime.now().replace(microsecond=0).isoformat() + "Z"
+    data_conclusao_esperada = datetime.now().replace(microsecond=0).isoformat() + "Z"
     assert resposta.json() == {"mensagem": "Tarefa atualizada"}
 
     resposta = cliente.put("/tarefas/0")
@@ -81,20 +88,19 @@ def test_tarefas_put(cliente: TestClient):
 
     resposta = cliente.get("/tarefas/1")
     assert resposta.status_code == 200
-    assert resposta.json() ==  {
+    assert resposta.json() == {
         "_id": 1,
         "descricao": "teste",
-        "data_criacao": DATA,
+        "data_criacao": data_esperada,
         "concluida": True,
         "titulo": "teste",
-        "data_conclusao": str(DATA_CONCLUSAO)
+        "data_conclusao": str(data_conclusao_esperada),
     }
 
 
-# 5. Implementar um teste unitário para a rota /tarefas/{id} (DELETE)
 def test_tarefas_delete(cliente: TestClient):
-    # Crio a tarefa
-    resposta = cliente.post("/tarefas?titulo=teste&descricao=teste")
+    """Verifica a remoção de uma tarefa."""
+    cliente.post("/tarefas?titulo=teste&descricao=teste")
 
     resposta = cliente.delete("/tarefas/0")
     assert resposta.json() == {"mensagem": "Tarefa não existe"}
@@ -107,6 +113,7 @@ def test_tarefas_delete(cliente: TestClient):
 
 
 def test_autor(cliente: TestClient):
+    """Verifica a rota do autor."""
     resposta = cliente.get("/autor")
 
     assert resposta.status_code == 200

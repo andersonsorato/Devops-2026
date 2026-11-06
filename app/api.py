@@ -29,7 +29,9 @@ def montar_engine():
             return create_engine(FALLBACK_DATABASE_URL, connect_args={"check_same_thread": False})
 
     mysql_url = (
-        f"postgresql+psycopg://{DATABASE_USERNAME}:{DATABASE_PASSWORD}@{DATABASE_ADDRESS}:3306/{DATABASE}"
+        "postgresql+psycopg://"
+        f"{DATABASE_USERNAME}:{DATABASE_PASSWORD}@{DATABASE_ADDRESS}:3306/"
+        f"{DATABASE}"
     )
     try:
         engine = create_engine(mysql_url, pool_pre_ping=True)
