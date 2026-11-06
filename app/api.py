@@ -1,14 +1,32 @@
 """Aplicação para o módulo de extensão DevOps."""
 
+import logging
 import os
 from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import Depends, FastAPI
+from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from .modelo import Tarefa
+
+LOGGER = logging.getLogger("aplicação")
+LOGGER.setLevel(logging.DEBUG)
+
+saida_padrao = logging.StreamHandler()
+arquivo = logging.FileHandler("aplicacao.log", encoding="utf-8")
+
+formatador = logging.Formatter(
+    "%(name)s | %(levelname)s | %(asctime)s | %(filename)s:%(lineno)s | %(message)s"
+)
+
+saida_padrao.setFormatter(formatador)
+arquivo.setFormatter(formatador)
+
+LOGGER.addHandler(saida_padrao)
+LOGGER.addHandler(arquivo)
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 DATABASE_USERNAME = os.getenv("DATABASE_USERNAME", "root")
@@ -19,7 +37,7 @@ FALLBACK_DATABASE_URL = "sqlite:///banco.db"
 
 
 def montar_engine():
-    """Cria o engine e faz fallback para SQLite quando o banco principal não estiver disponível."""
+    """Cria o engine e usa SQLite como fallback quando o banco principal não estiver disponível."""
     if DATABASE_URL:
         if DATABASE_URL.startswith("sqlite"):
             return create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -28,13 +46,13 @@ def montar_engine():
         except (ModuleNotFoundError, ImportError, OperationalError):
             return create_engine(FALLBACK_DATABASE_URL, connect_args={"check_same_thread": False})
 
-    mysql_url = (
+    postgres_url = (
         "postgresql+psycopg://"
-        f"{DATABASE_USERNAME}:{DATABASE_PASSWORD}@{DATABASE_ADDRESS}:3306/"
+        f"{DATABASE_USERNAME}:{DATABASE_PASSWORD}@{DATABASE_ADDRESS}:5432/"
         f"{DATABASE}"
     )
     try:
-        engine = create_engine(mysql_url, pool_pre_ping=True)
+        engine = create_engine(postgres_url, pool_pre_ping=True)
         with engine.connect() as conn:
             conn.exec_driver_sql("SELECT 1")
         return engine
@@ -64,6 +82,14 @@ async def inicializacao(_: FastAPI):
 
 
 APP = FastAPI(lifespan=inicializacao)
+app = APP
+
+
+@APP.exception_handler(404)
+async def trata_404(_, __):
+    """Retorna JSON amigável para rotas inexistentes."""
+    LOGGER.error("Página inexistente")
+    return JSONResponse(status_code=404, content={"mensagem": "Página inexistente"})
 
 
 def formatar_data(value):
@@ -95,6 +121,8 @@ def serializar_tarefa(tarefa: Tarefa):
 async def tarefas(sessao: SESSAO):
     """Lista todas as tarefas."""
     lista_tarefas = sessao.exec(select(Tarefa)).all()
+
+    LOGGER.info("Usuário listou todas as tarefas")
     return [serializar_tarefa(tarefa) for tarefa in lista_tarefas]
 
 
