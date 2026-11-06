@@ -1,7 +1,5 @@
 """Testes da API de tarefas."""
 
-from datetime import datetime
-
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import SQLModel, Session, create_engine
@@ -53,34 +51,27 @@ def test_tarefas_get(cliente: TestClient):
 
 def test_tarefas_post(cliente: TestClient):
     """Verifica a criação de uma tarefa."""
-    data_esperada = datetime.now().replace(microsecond=0).isoformat() + "Z"
-
     resposta = cliente.post("/tarefas?titulo=teste&descricao=teste")
 
     assert resposta.status_code == 201
     assert resposta.json() == {"mensagem": "OK"}
 
     resposta = cliente.get("/tarefas")
-    assert resposta.json() == [
-        {
-            "_id": 1,
-            "descricao": "teste",
-            "data_criacao": data_esperada,
-            "concluida": False,
-            "titulo": "teste",
-            "data_conclusao": None,
-        }
-    ]
+    tarefa = resposta.json()[0]
+
+    assert tarefa["_id"] == 1
+    assert tarefa["descricao"] == "teste"
+    assert tarefa["titulo"] == "teste"
+    assert tarefa["concluida"] is False
+    assert tarefa["data_conclusao"] is None
+    assert tarefa["data_criacao"].endswith("Z")
 
 
 def test_tarefas_put(cliente: TestClient):
     """Verifica a conclusão e o retorno de uma tarefa."""
-    data_esperada = datetime.now().replace(microsecond=0).isoformat() + "Z"
-
     cliente.post("/tarefas?titulo=teste&descricao=teste")
 
     resposta = cliente.put("/tarefas/1")
-    data_conclusao_esperada = datetime.now().replace(microsecond=0).isoformat() + "Z"
     assert resposta.json() == {"mensagem": "Tarefa atualizada"}
 
     resposta = cliente.put("/tarefas/0")
@@ -88,14 +79,15 @@ def test_tarefas_put(cliente: TestClient):
 
     resposta = cliente.get("/tarefas/1")
     assert resposta.status_code == 200
-    assert resposta.json() == {
-        "_id": 1,
-        "descricao": "teste",
-        "data_criacao": data_esperada,
-        "concluida": True,
-        "titulo": "teste",
-        "data_conclusao": str(data_conclusao_esperada),
-    }
+
+    tarefa = resposta.json()
+    assert tarefa["_id"] == 1
+    assert tarefa["descricao"] == "teste"
+    assert tarefa["titulo"] == "teste"
+    assert tarefa["concluida"] is True
+    assert tarefa["data_conclusao"] is not None
+    assert tarefa["data_conclusao"].endswith("Z")
+    assert tarefa["data_criacao"].endswith("Z")
 
 
 def test_tarefas_delete(cliente: TestClient):

@@ -1,6 +1,5 @@
 """Aplicação para o módulo de extensão DevOps."""
 
-import logging
 import os
 from datetime import datetime, timezone
 from typing import Annotated
@@ -10,23 +9,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, SQLModel, create_engine, select
 
+from .log import LOGGER
 from .modelo import Tarefa
-
-LOGGER = logging.getLogger("aplicação")
-LOGGER.setLevel(logging.DEBUG)
-
-saida_padrao = logging.StreamHandler()
-arquivo = logging.FileHandler("aplicacao.log", encoding="utf-8")
-
-formatador = logging.Formatter(
-    "%(name)s | %(levelname)s | %(asctime)s | %(filename)s:%(lineno)s | %(message)s"
-)
-
-saida_padrao.setFormatter(formatador)
-arquivo.setFormatter(formatador)
-
-LOGGER.addHandler(saida_padrao)
-LOGGER.addHandler(arquivo)
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 DATABASE_USERNAME = os.getenv("DATABASE_USERNAME", "root")
