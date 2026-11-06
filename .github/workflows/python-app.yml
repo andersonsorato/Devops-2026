@@ -59,6 +59,4 @@ jobs:
     runs-on: ubuntu-slim
     steps:
       - name: Deploy hook
-        run: curl -X GET ${{ secrets.RENDER_DEPLOY_HOOK }}
-      
-    
+        run: curl -X GET ${{ secrets.RENDER_DEPLOY_HOOK }}    
